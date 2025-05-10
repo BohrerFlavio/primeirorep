@@ -1,0 +1,7 @@
+#INCLUDE "protheus.ch"
+
+User Function MDTA6954()
+    
+    PUTMV('MV_NG2ESOC','2')
+
+Return .T.

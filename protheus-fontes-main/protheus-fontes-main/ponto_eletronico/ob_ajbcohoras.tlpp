@@ -1,0 +1,166 @@
+#INCLUDE 'protheus.ch'
+#INCLUDE "TOPCONN.CH"
+
+
+user function ob_AjBcoHoras()
+
+
+	cPerg :=  "OB_AJBCOHORAS"
+	ValidPerg()
+
+	if Pergunte(cPerg,.T.)
+		_ConsultaSaldoBancos()
+		do while !_trbb->(eof())
+			/*
+			if _trbb->SALDO_BCO > 0 .and. _trbb->SALDO_ROUPA > 0
+
+			elseif _trbb->SALDO_BCO < 0 .and. _trbb->SALDO_ROUPA < 0
+
+			elseif _trbb->SALDO_BCO > 0 .and. _trbb->SALDO_ROUPA < 0
+				_nHrs6 := _trbb->SALDO_BCO + _trbb->SALDO_ROUPA
+
+				if _nHrs6 > 0
+					_gravaZBC(MV_PAR02, _trbb->SALDO_ROUPA, _trbb->PI_FILIAL, _trbb->PI_MAT, _trbb->RA_CC, .T.)
+					_gravaSPI(MV_PAR02, _trbb->SALDO_ROUPA, _trbb->PI_FILIAL, _trbb->PI_MAT, _trbb->RA_CC, "505")
+				elseif _nHrs6 < 0
+					_gravaZBC(MV_PAR02, _trbb->SALDO_BCO, _trbb->PI_FILIAL, _trbb->PI_MAT, _trbb->RA_CC,  .T.)
+					_gravaSPI(MV_PAR02, _trbb->SALDO_BCO, _trbb->PI_FILIAL, _trbb->PI_MAT, _trbb->RA_CC, "505")
+				endif
+			elseif _trbb->SALDO_BCO < 0 .and. _trbb->SALDO_ROUPA > 0
+				_nHrs6 := _trbb->SALDO_ROUPA + _trbb->SALDO_BCO
+				if _nHrs6 > 0
+					_gravaZBC(MV_PAR02, _trbb->SALDO_BCO, _trbb->PI_FILIAL, _trbb->PI_MAT, _trbb->RA_CC, .F.)
+					_gravaSPI(MV_PAR02, _trbb->SALDO_BCO, _trbb->PI_FILIAL, _trbb->PI_MAT, _trbb->RA_CC, "205")
+				elseif _nHrs6 < 0
+					_gravaZBC(MV_PAR02, _trbb->SALDO_ROUPA, _trbb->PI_FILIAL, _trbb->PI_MAT, _trbb->RA_CC, .F.)
+					_gravaSPI(MV_PAR02, _trbb->SALDO_ROUPA, _trbb->PI_FILIAL, _trbb->PI_MAT, _trbb->RA_CC, "205")
+				endif
+			endif
+			*/
+			if _trbb->SALDO_BCO < 0 
+				_nHrs6 := _trbb->SALDO_BCO
+				_gravaZBC(MV_PAR02, _trbb->SALDO_BCO, _trbb->PI_FILIAL, _trbb->PI_MAT, _trbb->RA_CC, .F.)
+				_gravaSPI(MV_PAR02, _trbb->SALDO_BCO, _trbb->PI_FILIAL, _trbb->PI_MAT, _trbb->RA_CC, "205")				
+			endif			
+			
+			dbSelectArea("_trbb")
+			dbSkip()
+		enddo
+		dbSelectArea("_trbb")
+		_trbb->(DbCloseArea())
+
+
+	Endif
+return()
+
+Static Function ValidPerg()
+Local i:= 0
+Local j:= 0
+	cAlias := Alias()
+	aRegs  :={}
+
+	AADD(aRegs,{cPerg,"01","Data banco hors de  ?","Data de            ?","Data de           ?","mv_ch1","D",08,0,0,"G","","mv_par01","","","","","","","","","","","","","","","","","","","","","","","","","",""})
+	AADD(aRegs,{cPerg,"02","Data banco hors até ?","Data Ate           ?","Data ate          ?","mv_ch2","D",08,0,0,"G","","mv_par02","","","","","","","","","","","","","","","","","","","","","","","","","",""})
+	AADD(aRegs,{cPerg,"03","Matrícula?","Matrícula?","Matrícula?","mv_ch3","C",06,0,0,"G","","mv_par03","","","","","","","","","","","","","","","","","","","","","","","","","",""})
+
+	DbSelectArea("SX1")
+	DbSetOrder(1)
+	For i:=1 to Len(aRegs)
+		If !DbSeek(cPerg+aRegs[i,2])
+			RecLock("SX1",.T.)
+			For j:=1 to FCount()
+				If j<=Len(aRegs[i])
+					FieldPut(j,aRegs[i,j])
+				Endif
+			Next
+			MsUnlock()
+		Endif
+	Next
+	DbSelectArea(cAlias)
+Return
+
+/*
+Consulta saldo
+*/
+static function _ConsultaSaldoBancos()
+	Local _cQuery := ""
+	_cQuery := "SELECT PI_FILIAL, PI_MAT, RA_CC, "
+	_cQuery += " SUM(CASE WHEN PI_PD < 500 THEN (CAST(PI_QUANT AS INTEGER) + (((PI_QUANT - CAST(PI_QUANT AS INTEGER))*100) /60)) ELSE 0 END)  - "
+	_cQuery += " SUM(CASE WHEN PI_PD >= 500 THEN (CAST(PI_QUANT AS INTEGER) + (((PI_QUANT - CAST(PI_QUANT AS INTEGER))*100) /60)) ELSE 0 END) AS SALDO_BCO, "
+	_cQuery += " ISNULL((SELECT ZBB_SLDATU FROM " + RETSQLNAME ("ZBB") +" AS ZBB WHERE ZBB.D_E_L_E_T_ = '' AND ZBB_MAT = PI_MAT ),0) AS SALDO_ROUPA "
+	_cQuery += " FROM " + RETSQLNAME ("SPI") +" AS SPI "
+	_cQuery += " INNER JOIN " + RETSQLNAME ("SRA") +" AS SRA ON RA_FILIAL = PI_FILIAL AND RA_MAT = PI_MAT  AND SRA.D_E_L_E_T_ = '' AND RA_DEMISSA = '' AND RA_BHFOL = 'S' AND RA_ACUMBH = 'S' "
+	_cQuery += " WHERE SPI.D_E_L_E_T_ = '' AND PI_DATA BETWEEN '"+dtos(MV_PAR01)+"' AND '"+dtos(MV_PAR02)+"'  "
+	if !empty(mv_par03)
+		_cQuery += " and PI_MAT = '"+MV_PAR03+"' AND PI_STATUS = '' AND PI_DTBAIX = ''  "
+	endif
+	_cQuery += " GROUP BY PI_FILIAL, PI_MAT, RA_CC "
+	_cQuery += " ORDER BY PI_FILIAL, PI_MAT, RA_CC "
+
+	tcquery _cQuery new alias _trbb
+
+return()
+
+
+static function _gravaZBC(_dData6, _nHrs6, _cFil6, _cMat6, _cCc6, _lSoma )
+	Local _nHrs5 := round(ABS(_nHrs6), 2)
+	Local _nHrZBB := 0
+	Local _nHrAZBB := 0
+
+	if !_lSoma
+		reclock('ZBC',.T.)
+		ZBC->ZBC_FILIAL := _cFil6
+		ZBC->ZBC_MAT    := _cMat6
+		ZBC->ZBC_DTREF  := _dData6
+		ZBC->ZBC_HRBAIX := _nHrs5
+		ZBC->ZBC_APONTA := 'B'
+		msunlock()
+	endif
+
+	if ZBB->(dbSeek(_cFil6 + _cMat6))
+		_nHrZBC := _nHrs5
+		if _lSoma
+			_nHrZBB  := ZBB->ZBB_SLDATU
+			_nHrAZBB := ZBB->ZBB_SLDATU + _nHrZBC
+		else
+			_nHrZBB  := ZBB->ZBB_SLDATU
+			_nHrAZBB := ZBB->ZBB_SLDATU - _nHrZBC
+		endif
+		reclock('ZBB',.f.)
+		ZBB->ZBB_SLDATU := _nHrAZBB
+		ZBB->ZBB_SLDANT := _nHrZBB
+		msunlock()
+	else
+		reclock('ZBB',.T.)
+		ZBB->ZBB_FILIAL := _cFil6
+		ZBB->ZBB_MAT 	:= _cMat6
+		ZBB->ZBB_CC     := alltrim(_cCc6)
+		if _lSoma
+			ZBB->ZBB_SLDATU := _nHrs5
+		else
+			ZBB->ZBB_SLDATU := _nHrs5*-1
+		endif
+		ZBB->ZBB_SLDANT := 0
+		ZBB->ZBB_ULTPER := GETMV('MV_PAPONTA')
+		msunlock()
+	endif
+
+return
+
+
+
+static function _gravaSPI(_dData6, _nHrs6, _cFil6, _cMat6, _cCc6, _cEvento )
+	Local _nHrs5 := abs(_nHrs6)
+
+	reclock('SPI',.T.)
+	SPI->PI_FILIAL := _cFil6
+	SPI->PI_MAT    := _cMat6
+	SPI->PI_DATA   := _dData6
+	SPI->PI_PD     := _cEvento
+	SPI->PI_CC     := _cCc6
+	SPI->PI_QUANT  := fConvHr(_nHrs5, 'H')
+	SPI->PI_QUANTV := fConvHr(_nHrs5, 'H')
+	SPI->PI_FLAG   := 'I'
+	msunlock()
+
+return

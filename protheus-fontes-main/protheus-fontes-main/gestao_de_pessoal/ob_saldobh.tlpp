@@ -1,0 +1,138 @@
+#INCLUDE 'Protheus.ch'
+#INCLUDE "TOPCONN.CH"
+
+user function ob_SaldoBH()	
+	private cPath	 := AllTrim(GetTempPath())
+	private cAlExc   := GetNextAlias()
+	private cQuery   := ""
+	cPerg :=  "ob_SaldoBH"
+	ValidPerg()
+	if Pergunte(cPerg,.T.)
+		FWMsgRun(, {|oSay| Consulta( oSay ) }, "Processando....", "Buscando dados..." )
+	EndIf
+
+Return
+
+static function Consulta(oSay)
+	Local _aLin := {}
+	Local _CCAnt := ""
+	Local cArq := ""
+	Local oExcel := FWMSEXCEL():New()
+	oExcel:SetFontSize(8)
+	oExcel:SetFont("Arial")
+
+	cQuery := " select RA_FILIAL, RA_MAT, RA_NOME, RA_CC, CTT_DESC01, "
+	cQuery += " CASE WHEN ISNULL((select SUM(CASE WHEN SP92.P9_TIPOCOD = '1' THEN CAST(SPI2.PI_QUANT AS INTEGER) + (((SPI2.PI_QUANT - CAST(SPI2.PI_QUANT AS INTEGER))*100) /60) ELSE 0 END)  - "
+	cQuery += " SUM(CASE WHEN SP92.P9_TIPOCOD = '2' THEN CAST(SPI2.PI_QUANT AS INTEGER) + (((SPI2.PI_QUANT - CAST(SPI2.PI_QUANT AS INTEGER))*100) /60) ELSE 0 END ) "
+	cQuery += " FROM "+RetSqlName("SPI")+" AS SPI2 "
+	cQuery += " INNER JOIN "+RetSqlName("SP9")+" AS SP92 ON SP92.P9_CODIGO = SPI2.PI_PD AND SP92.D_E_L_E_T_ = '' "
+	cQuery += " WHERE SPI2.D_E_L_E_T_ = '' AND SRA.RA_FILIAL = SPI2.PI_FILIAL AND SRA.RA_MAT = SPI2.PI_MAT AND SPI2.PI_STATUS = '' AND SPI2.PI_DATA < '"+dtos(MV_PAR01)+"'),0) < 0 THEN "
+	cQuery += " (select SUM(CASE WHEN SP92.P9_TIPOCOD = '1' THEN CAST(SPI2.PI_QUANT AS INTEGER) + (((SPI2.PI_QUANT - CAST(SPI2.PI_QUANT AS INTEGER))*100) /60) ELSE 0 END ) - "
+	cQuery += " SUM(CASE WHEN SP92.P9_TIPOCOD = '2' THEN CAST(SPI2.PI_QUANT AS INTEGER) + ((SPI2.PI_QUANT - CAST(SPI2.PI_QUANT AS INTEGER))*100) /60 ELSE 0 END) "
+	cQuery += " FROM "+RetSqlName("SPI")+" AS SPI2 "
+	cQuery += " INNER JOIN "+RetSqlName("SP9")+" AS SP92 ON SP92.P9_CODIGO = SPI2.PI_PD AND SP92.D_E_L_E_T_ = '' "
+	cQuery += " WHERE SPI2.D_E_L_E_T_ = '' AND SRA.RA_FILIAL = SPI2.PI_FILIAL AND SRA.RA_MAT = SPI2.PI_MAT AND SPI2.PI_STATUS = '' AND SPI2.PI_DATA < '"+dtos(MV_PAR01)+"') ELSE 0 END + "
+	cQuery += " SUM(CASE WHEN SP9.P9_TIPOCOD = '1' THEN CAST(PI_QUANT AS INTEGER) + (((PI_QUANT - CAST(PI_QUANT AS INTEGER))*100) /60) ELSE 0 END)  - "
+	cQuery += " SUM(CASE WHEN SP9.P9_TIPOCOD = '2' THEN CAST(PI_QUANT AS INTEGER) + (((PI_QUANT - CAST(PI_QUANT AS INTEGER))*100) /60) ELSE 0 END) AS SALDO, "
+	cQuery += " ISNULL((SELECT SUM(ZBB_SLDATU) FROM "+RetSqlName("ZBB")+" AS ZBB WHERE ZBB_FILIAL = RA_FILIAL AND ZBB_MAT = RA_MAT AND ZBB.D_E_L_E_T_ = ''),0) AS TROUPA "
+	cQuery += " FROM "+RetSqlName("SRA")+" AS SRA "
+	cQuery += " INNER JOIN "+RetSqlName("CTT")+" AS CTT ON RA_CC = CTT_CUSTO AND CTT.D_E_L_E_T_ = '' "
+	cQuery += " LEFT  JOIN "+RetSqlName("SPI")+" AS SPI ON RA_FILIAL = PI_FILIAL AND RA_MAT = PI_MAT AND SPI.D_E_L_E_T_ = '' "
+	cQuery += " AND PI_STATUS = '' AND PI_DATA BETWEEN '"+dtos(MV_PAR01)+"' AND '"+dtos(MV_PAR02)+"' "
+	cQuery += " LEFT  JOIN "+RetSqlName("SP9")+" AS SP9 ON P9_CODIGO = PI_PD AND SP9.D_E_L_E_T_ = '' "
+	cQuery += " WHERE SRA.D_E_L_E_T_ = '' AND RA_TNOTRAB <> '999' AND RA_DEMISSA = '' AND RA_CC BETWEEN '"+MV_PAR03+"' AND '"+MV_PAR04+"' "
+	cQuery += " GROUP BY SRA.RA_FILIAL, SRA.RA_MAT, SRA.RA_NOME, SRA.RA_CC, CTT_DESC01 "
+	cQuery += " ORDER BY SRA.RA_FILIAL, SRA.RA_CC, SRA.RA_MAT "
+
+	TCQUERY cQuery NEW ALIAS "TRB"
+
+	_dIni:= mv_par01
+	_dFim:= mv_par02
+
+	prim := .t.
+
+	oSay:cCaption := ("Preparando dados para planilha...")
+	ProcessMessages()
+
+	dbSelectArea("TRB")
+	DbGoTop()
+	While !Eof()
+		_aLin := {}
+		if prim
+			_dIni:= mv_par01
+			cPlano:= "Planilha01"
+			cTitulo:= "BANCO DE HORAS ENTRE "+DTOC(mv_par01)+ " E "+ DTOC(mv_par02)
+			oExcel:AddworkSheet(cPlano)
+			oExcel:AddTable(cPlano,cTitulo)
+			
+			oExcel:AddColumn(cPlano,cTitulo,'Saldo BH',3,2)
+			oExcel:AddColumn(cPlano,cTitulo,'Saldo TR',3,2)
+			oExcel:AddColumn(cPlano,cTitulo, alltrim(trb->RA_CC) + " - "+alltrim(trb->CTT_DESC01), 1, 1)
+			
+			prim := .F.
+		endif
+		if _CCAnt <> alltrim(trb->RA_CC)
+
+			aadd( _aLin, 'Saldo BH')
+			aadd( _aLin, 'Saldo TR')
+			aadd( _aLin, alltrim(trb->RA_CC) + " - "+alltrim(trb->CTT_DESC01))
+			oExcel:AddRow(cPlano,cTitulo, _aLin)
+
+			_aLin := {}
+		Endif
+
+		AADD(_aLin, trb->SALDO)
+		AADD(_aLin, trb->TROUPA)
+		AADD(_aLin, alltrim(trb->RA_MAT) + " - "+alltrim(trb->RA_NOME))
+
+		oExcel:AddRow(cPlano,cTitulo, _aLin)
+
+		_CCAnt := alltrim(trb->RA_CC)
+		dbSelectArea("TRB")
+		dbskip()
+	Enddo
+
+	dbSelectArea("TRB")
+	dbCloseArea()
+
+	cArq:= cPath+cAlExc
+	oExcel:Activate()
+	oExcel:GetXMLFile(cArq)
+	oExcelApp:= MsExcel():New()
+	oExcelApp:WorkBooks:Open(cArq)
+	oExcelApp:SetVisible(.T.)
+	oExcelApp:Destroy()
+
+return
+
+
+
+/**************************
+Pergunta
+***************************/
+Static Function ValidPerg()
+	Local i
+	Local j
+	cAlias := Alias()
+	aRegs  :={}
+
+	AADD(aRegs,{cPerg,"01","Data de         ?","Data de            ?","Data de            ?","mv_ch1","D",08,0,0,"G","","mv_par01","","","","","","","","","","","","","","","","","","","","","","","","","",""})
+	AADD(aRegs,{cPerg,"02","Data ate        ?","Data Ate           ?","Data ate           ?","mv_ch2","D",08,0,0,"G","","mv_par02","","","","","","","","","","","","","","","","","","","","","","","","","",""})
+	AADD(aRegs,{cPerg,"03","C. Custo de     ?","C. Custo de        ?","C. custo de        ?","mv_ch3","C",09,0,0,"G","","mv_par03","","","","","","","","","","","","","","","","","","","","","","","","","CTT",""})
+	AADD(aRegs,{cPerg,"04","C. Custo ate    ?","C. Custo ate       ?","C. custo ate       ?","mv_ch4","C",09,0,0,"G","","mv_par04","","","","","","","","","","","","","","","","","","","","","","","","","CTT",""})
+
+	DbSelectArea("SX1")
+	DbSetOrder(1)
+	For i:=1 to Len(aRegs)
+		If !DbSeek(cPerg+aRegs[i,2])
+			RecLock("SX1",.T.)
+			For j:=1 to FCount()
+				If j<=Len(aRegs[i])
+					FieldPut(j,aRegs[i,j])
+				Endif
+			Next
+			MsUnlock()
+		Endif
+	Next
+	DbSelectArea(cAlias)
+Return

@@ -1,0 +1,72 @@
+<html>   
+<Title>Portal do Vendedor Frigorífico Silva - Home</title>
+<head>
+<meta http-equiv='Cache-Control' content='No-Cache'>
+<meta http-equiv='Pragma' content='No-Cache'>
+<meta http-equiv='Expires' content='0'>
+</head>
+		
+<body>
+<script language='JavaScript'>  
+function Env_Mail()
+{ 
+var e_mail = frm_login_ped.usuario.value
+if (e_mail == '')
+{ 
+	alert('Usuário em Branco');
+	return false;
+}  
+frm_Mail_Pass.email.value=e_mail
+frm_Mail_Pass.submit()
+}
+</script> 
+<link rel="stylesheet" type="text/css" href="estilo.css"> 
+<link rel="shortcut icon" href="imagens/silva.ico">
+<form name="frm_login_ped" method="post" action="u_p_login.apl">
+
+ <center>
+<table border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse" bordercolor="#111111" width="100%" height="426"> 
+  <tr><td height="13"></td></tr>
+  <tr><td height="13" bgcolor="#8B3626">
+  <p align="center"><font face="Arial" size="1" color="#FFFFFF">Frigorífico Silva Indústria e Comércio Ltda.</font></td></tr>
+<tr><td align="center" height="100"><b><font face="Arial" size="5">PORTAL DO VENDEDOR</font></b></td></tr>
+<tr><td width=align="center" height="70">
+  <p align="center"><img border="0" src="imagens/logo.jpg"></td></tr>
+<tr><td height="116"><div align="center">
+  <table border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse" bordercolor="#111111" width="25%" height="70">  
+    <tr>
+      <td width="30%" align="center">Login</td>
+      <td width="50%">
+      <p align="center">
+   <input type="text" name="usuario" id="usuario" size="20"></td>
+    </tr>
+    <tr>
+      <td width="30%" align="center">Senha</td>
+      <td width="50%">
+      <p align="center">
+<input type="password" name="senha" id="senha" size="20"</td>
+    </tr>  
+    
+  </table>
+</tr>
+<tr align=center>
+<td>
+<input type="submit" name="submit" value="Acessar">
+<input type="reset" name="reset" value="Cancelar">
+</form>
+<form name="frm_Mail_Pass" method="post" action="u_MailP.apl">  
+<input type="hidden" id="email" name="email" value='' />
+&nbsp;&nbsp;<a href='#' onclick="Env_Mail()"><p><font size=1>Esqueci minha senha.</font></a>
+</form>
+</td>
+</tr> 
+<tr><td height="46">&nbsp;</td></tr> 
+
+<tr><td height="13" bgcolor="#8B3626">
+  <p align="center"><font face="Arial" size="1" color="#FFFFFF">Desenvolvido pelo DTI - Departamento de Tecnologia da Informação
+   Copyright&nbsp; ©2010</font></td></tr>
+</table>
+                                                                                      
+ </center>
+</body>
+</html>
