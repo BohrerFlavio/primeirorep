@@ -1,0 +1,308 @@
+#INCLUDE "rwmake.ch"
+#INCLUDE "ap5mail.ch"
+#INCLUDE "TOPCONN.CH"
+#INCLUDE "FWPrintSetup.ch"
+
+#INCLUDE "PROTHEUS.CH"
+#INCLUDE "RPTDEF.CH"
+
+
+#DEFINE Imp_Spool      	2
+#DEFINE ALIGN_H_LEFT   	0
+#DEFINE ALIGN_H_RIGHT  	1
+#DEFINE ALIGN_H_CENTER 	2
+#DEFINE ALIGN_V_CENTER 	0
+#DEFINE ALIGN_V_TOP	   	1
+#DEFINE ALIGN_V_BOTTON 	2
+
+User Function ob_recibo()
+
+	Local _nX := 0
+	Local _nContRec := 0
+	Private _aProve := {}
+	Private _aDesc := {}
+	Private _aBase := {}
+	Private oPrint
+	Private oArial08		:= TFont():New("Arial",08,08,,.F.,,,,.T.,.F.)//Normal
+	Private oArial08N		:= TFont():New("Arial",08,08,,.T.,,,,.T.,.F.)//Negrito
+	Private oArial10		:= TFont():New("Arial",10,10,,.F.,,,,.T.,.F.)//Normal
+	Private oArial10N		:= TFont():New("Arial",10,10,,.T.,,,,.T.,.F.)//Negrito
+	Private oPrinter		:= ""
+	Private oFont1 			:=	TFont():New( "Verdana", 07, 07, , .F., , , , .T., .F. )//Verbas
+	Private oFont2 			:=	TFont():New( "Verdana", 07, 07, , .F., , , , .T., .F. )//Cabeçalho e Rodapé
+	Private oFont2N 		:= 	TFont():New( "Verdana", 07, 07, , .T., , , , .T., .F. )//Cabeçalho e Rodapé Negrito
+	Private oFont3 			:=	TFont():New( "Verdana", 12, 12, , .T., , , , .T., .F. )//Titulo Interno
+	Private oFont4 			:=	TFont():New( "Verdana", 14, 14, , .T., , , , .T., .F. )//Titulo Maior
+
+	cPerg :=  'OB_RECIBO'
+	VldPerg2(cPerg)
+	Pergunte(cPerg,.T.)
+	dbSelectArea("SRA")
+	DbSetOrder(16)
+	DbSeek(xFilial("SRA")+mv_par01+mv_par05, .F.)
+	if found()
+		do while !eof() .and. SRA->RA_MAT <= mv_par06
+			if  SRA->RA_PROCES == mv_par01
+				_aProve := _Consulta(SRA->RA_FILIAL, SRA->RA_MAT)
+				if len(_aProve) > 0
+					oPrinter	:= FWMSPrinter():New(SRA->RA_MAT+"_"+dtos(date())+StrTran(Time(), ':', ''),6,.F.,,.T.,,,,,.F.,,.F.) //+dtos(date())+Time()
+					oPrinter:setDevice(IMP_PDF)
+					oPrinter:cPathPDF := alltrim(mv_par07)
+					_cPeriod := ""
+					for _nX := 1 to len(_aProve)
+						if _cPeriod <> _aProve[_nX][1]
+							_cPeriod := _aProve[_nX][1]
+
+							oPrinter:EndPage()
+							oPrinter:StartPage()
+							//Cabeçalho
+							fCabPDF(_cPeriod)
+							fLancPDF(_cPeriod)
+
+						endif
+					next _nX
+
+					oPrinter:EndPage()
+					oPrinter:Preview()
+					FreeObj(oPrinter)
+					oPrinter := Nil
+					_nContRec++
+				endif
+				dbSelectArea("SRA")
+				DbSkip()
+			endif
+		enddo
+		MsgAlert("Foram gerados "+alltrim(str(_nContRec)) + " arquivos PDFs para funcionários diferentes na pasta "+ alltrim(mv_par07))
+	endif
+Return
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Static Function VldPerg2(cPerg)
+///////////////////////////
+	Local _i := 0
+	Local _j := 0
+	cAlias := Alias()
+	aRegs  :={}
+	AADD(aRegs,{cPerg,"01","Processo?           ","","","mv_ch1","C",05,0,0,"G","","mv_par01","","","","","","","","","","","","","","","","","","","","","","","","","RCJ",""})
+	AADD(aRegs,{cPerg,"02","Roteiro?            ","","","mv_ch2","C",03,0,0,"G","","mv_par02","","","","","","","","","","","","","","","","","","","","","","","","","",""})
+	AADD(aRegs,{cPerg,"03","Período de? (AAAAMM)","","","mv_ch3","C",06,0,0,"G","","mv_par03","","","","","","","","","","","","","","","","","","","","","","","","","RCHAUS",""})
+	AADD(aRegs,{cPerg,"04","Período até?(AAAAMM)","","","mv_ch4","C",06,0,0,"G","","mv_par04","","","","","","","","","","","","","","","","","","","","","","","","","RCHAUS",""})
+	aAdd(aRegs,{cPerg,"05","Matrícula de?       ","","","mv_ch5","C",06,0,0,"G","","mv_par05", "",           "",           "",           "",   "",   "",           "",           "",           "",   "",   "",              "",           "",           "",   "",   "",              "",              "",              "",   "",   "",              "",              "",              "",   "SRA", ""} )
+	aAdd(aRegs,{cPerg,"06","Matrícula até?      ","","","mv_ch6","C",06,0,0,"G","","mv_par06", "",           "",           "",           "",   "",   "",           "",           "",           "",   "",   "",              "",           "",           "",   "",   "",              "",              "",              "",   "",   "",              "",              "",              "",   "SRA", ""} )
+	AADD(aRegs,{cPerg,"07","Diretório destino?  ","","","mv_ch7","C",99,0,0,"G","","mv_par07","","","","","","","","","","","","","","","","","","","","","","","","","",""})
+
+	DbSelectArea("SX1")
+	DbSetOrder(1)
+	For _i := 1 to Len (aRegs)
+		RecLock("SX1", !DbSeek (cPerg + aRegs [_i, 2]))
+		For _j := 1 to Len (aRegs[_I])
+			If _j <= Len (aRegs [_i]) .and. !(left (fieldname (_j), 6) $ "X1_CNT/X1_PRESEL")
+				FieldPut (_j, aRegs [_i, _j])
+			Endif
+		Next
+		MsUnlock ()
+	Next
+	DbSelectArea(cAlias)
+Return
+
+static function _Consulta(_cFil, _cMat)
+	_aProve := {}
+	_aDesc := {}
+	_aBase := {}
+
+	cQuery := " SELECT PERIODO, PD, DESCR, TPVERBA, SUM(QUANT) AS HORAS, SUM(VALOR)  AS VALOR "
+	cQuery += " FROM ( "
+	cQuery += " SELECT RC_PERIODO AS PERIODO, RC_PD AS PD, RV_DESC AS DESCR, RC_HORAS AS QUANT, RC_VALOR AS VALOR, "
+	cQuery += "	CASE WHEN RV_TIPOCOD = '4' THEN '3' ELSE RV_TIPOCOD END AS TPVERBA "
+	cQuery += " FROM " + RetSqlName("SRC") + " AS SRC "
+	cQuery += " INNER JOIN " + RetSqlName("SRV") + " AS SRV ON RV_COD = RC_PD AND SRV.D_E_L_E_T_ = '' "
+	cQuery += " WHERE SRC.D_E_L_E_T_ = '' AND RC_FILIAL = '"+_cFil+"' AND RC_MAT = '"+_cMat+"' "
+	cQuery += " AND RC_PERIODO BETWEEN '"+MV_PAR03+"' AND '"+MV_PAR04+"' AND RC_PROCES = '"+MV_PAR01+"' AND RC_ROTEIR = '"+MV_PAR02+"' "
+	cQuery += " UNION ALL "
+	cQuery += " SELECT RD_PERIODO AS PERIODO, RD_PD AS PD, RV_DESC AS DESCR, RD_HORAS AS QUANT, RD_VALOR AS VALOR, "
+	cQuery += " CASE WHEN RV_TIPOCOD = '4' THEN '3' ELSE RV_TIPOCOD END AS TPVERBA "
+	cQuery += " FROM " + RetSqlName("SRD") + " AS SRD "
+	cQuery += " INNER JOIN " + RetSqlName("SRV") + " AS SRV ON RV_COD = RD_PD AND SRV.D_E_L_E_T_ = '' "
+	cQuery += " WHERE SRD.D_E_L_E_T_ = '' AND RD_FILIAL = '"+_cFil+"' AND RD_MAT = '"+_cMat+"' "
+	cQuery += " AND RD_PERIODO BETWEEN '"+MV_PAR03+"' AND '"+MV_PAR04+"' AND RD_PROCES = '"+MV_PAR01+"'  AND RD_ROTEIR = '"+MV_PAR02+"' "
+	cQuery += " ) AS AAAAA
+	cQuery += " GROUP BY PERIODO, PD, DESCR, TPVERBA "
+	cQuery += " ORDER BY PERIODO, PD, TPVERBA "
+
+	TcQuery cQuery new Alias "TRB"
+
+	DbSelectArea("TRB")
+	DbGotop()
+	While  TRB->(!Eof())
+		Aadd(_aProve,{TRB->PERIODO, TRB->PD+" "+TRB->DESCR,TRB->HORAS,TRB->VALOR,TRB->TPVERBA})
+		DbSelectArea("TRB")
+		TRB->(DbSkip())
+	Enddo
+	TRB->(DbCloseArea())
+return(_aProve)
+
+
+Static Function fCabPDF(_cPer)
+	Local cCodFunc	:= ""		//-- Codigo da Funcao do funcionario
+	Local cDescFunc	:= ""		//-- Descricao da Funcao do Funcionario
+	Local dDataRef   := CTOD("01/" + right(_cPer,2) + "/" + left(_cPer,4))
+	Local cDescCC		:= ""		//-- Descricao do Centro de Custo
+	Local nLi			:= 0
+	Local nLx			:= 004
+	Local cStartPath	:= GetSrvProfString("Startpath","")
+	Local cStrLogo		:= ""
+	Local cNomePadr		:= ""
+	Local lCorpManage	:= fIsCorpManage( FWGrpCompany() )	// Verifica se o cliente possui Gestão Corporativa no Grupo Logado
+	Local nSalario := 0
+
+	Private cPict1		:= "@E 999,999,999.99"
+	Private cPict2 		:= "@E 9,999,999.99"
+	Private cPict3 		:= "@E 999,999.99"
+
+// Carrega Funcao do Funcion. de acordo com a Dt Referencia
+	fBuscaFunc(dDataRef, @cCodFunc, @cDescFunc   )
+	nSalario := fBuscaSal(dDataRef,,,.F.)
+	If nSalario == 0
+		nSalario := SRA->RA_SALARIO
+	EndIf
+
+	nLi += 10
+	oPrinter:Box(  nLi, 004, nLi+20, 585, "-4" )			// Caixa da linha
+	nLi += 10
+	oPrinter:SayAlign(nLi-8,004,"RECIBO DE PAGAMENTO",oFont4,585,005, /**/, 2, 1 ) //"RECIBO DE PAGAMENTO  "
+	nLi += 10
+	oPrinter:Box(  nLi+5, 004, nLi+65, 585, "-4" )			// Caixa da linha
+	nLi += 20
+
+	cNomePadr := iif(lCorpManage,"lgrl"+ AllTrim(FWGrpCompany()+ SRA->RA_FILIAL) + ".BMP","lgrl" + SRA->RA_FILIAL + ".BMP" )
+	cStrLogo    := RetLogoEmp(.F.,, SRA->RA_FILIAL, "lgrl", .T. )
+
+	nLx := 080
+	oPrinter:SayBitmap(nLi, 005, cStartPath + cStrLogo, nLx, 040) // Tem que estar abaixo do RootPath
+	oPrinter:Say(nLi,nLx,Space(3)+"Empresa   : " +  SM0->M0_NOMECOM,oFont2N)	//"| Empresa   : "
+
+	oPrinter:Say(nLi,450, "CNPJ  : "+SM0->M0_CGC,oFont2N)	//"CNPJ  : "
+
+	nLi += 10
+	cDescCC := DescCc(SRA->RA_CC,SRA->RA_FILIAL)
+	oPrinter:Say(nLi, nLx,Space(3)+"C Custo   : " + SRA->RA_CC + " - " + cDescCC,oFont2N)	//"| C Custo   : "
+	oPrinter:Say(nLi,450,MesExtenso(MONTH(dDataRef))+"/"+STR(YEAR(dDataRef),4),oFont2N)			//Mes e Ano de de Referencia
+
+	nLi += 10
+	oPrinter:Say(nLi,nLx,Space(3)+"Matricula : " + SRA->RA_MAT + "   " + " Nome  : " + SRA->RA_NOME ,oFont2N)	//"| Matricula : " XXXXX +"   " + Nome  : " XXXXXXXXXXXXXXX
+
+	nLi += 10
+	oPrinter:Say(nLi,nLx,Space(3)+"Função    : "+cCodFunc+" - "+ cDescFunc ,oFont2N)	//"| Funcao    : "
+
+	nLi += 10
+	oPrinter:Say(nLi,nLx,Space(3)+"Salário   : " + Alltrim(Transform(nSalario,cPict2)),oFont2N)	//Salario
+
+	nLi += 10
+
+	oPrinter:Box(  nLi, 004, nLi+23, 585, "-4" )			// Caixa da linha
+	nLi += 15
+	oPrinter:Say(nLi,004,"   "+" P R O V E N T O S ",oFont3)	//"| P R O V E N T O S "
+	oPrinter:Say(nLi,195,"  D E S C O N T O S ",oFont3)	//"  D E S C O N T O S"
+	oPrinter:Say(nLi,390," B A S E S ",oFont3)	//"  B A S E S"
+	nLi += 05
+Return Nil
+
+
+Static Function fLancPDF(_cPer)   // Impressao dos Lancamentos
+	Local _nCont   	:= 0
+	Local _nCont1  	:= 0
+	Local _nCont2  	:= 0
+	Local _nCont3  	:= 0
+	Local dDataRef   := CTOD("01/" + right(_cPer,2) + "/" + left(_cPer,4))
+	Local aPos     	:= {}
+	Local nSpace   	:= 0
+	Local cMsgAniv 	:= ""
+	Local nPosFCab	:= 114 //Posição final do cabeçalho fCabPDF()
+	Local nLi		:= nPosFCab
+	Local TOTVENC := 0
+	Local TOTDESC := 0
+
+	cPict3 := "@E 999,999.99"
+	aPos := {004,006,193,195,388,390,585}
+	nSpace := 1
+
+
+	oPrinter:Box(  nLi+5, aPos[1], nLi+520, aPos[7], "-4" )
+	oPrinter:Box(  nLi+5, aPos[3], nLi+520, aPos[5], "-4" )
+	nLi1 := nLi + 10
+	nLi2 := nLi + 10
+	nLi3 := nLi + 10
+
+	For _nCont := 1 To len(_aProve)
+
+		if _aProve[_nCont][1] == _cPer
+
+			//Imprime Proventos
+			IF _nCont <= LEN(_aProve) .and. _aProve[_nCont][5] == "1"
+				nLi1 += 10
+				oPrinter:SayAlign(nLi1,aPos[2],_aProve[_nCont,2],oFont1,195,005,,ALIGN_H_LEFT)
+				oPrinter:SayAlign(nLi1,aPos[2],TRANSFORM(_aProve[_nCont,3],'999.99'),oFont1,130,005,,ALIGN_H_RIGHT)
+				oPrinter:SayAlign(nLi1,aPos[2],TRANSFORM(_aProve[_nCont,4] , cPict3 ),oFont1,185,005,,ALIGN_H_RIGHT)
+				TOTVENC += _aProve[_nCont,4]
+				_nCont1 ++
+			ENDIF
+			//Imprime Descontos
+			IF _nCont <= LEN(_aProve) .and. _aProve[_nCont][5] == "2"
+				nLi2 += 10
+				oPrinter:SayAlign(nLi2,aPos[4],_aProve[_nCont,2],oFont1,390,005,,ALIGN_H_LEFT)
+				oPrinter:SayAlign(nLi2,aPos[4],TRANSFORM(_aProve[_nCont,3],'999.99'),oFont1,130,005,,ALIGN_H_RIGHT)
+				oPrinter:SayAlign(nLi2,aPos[4],TRANSFORM(_aProve[_nCont,4] , cPict3 ),oFont1,190,005,,ALIGN_H_RIGHT)
+				TOTDESC += _aProve[_nCont,4]
+				_nCont2 ++
+			ENDIF
+			//Imprime Base
+			IF _nCont <= LEN(_aProve) .and. (_aProve[_nCont][5] == "3" .OR. _aProve[_nCont][5] == "4")
+				nLi3 += 10
+				oPrinter:SayAlign(nLi3,aPos[6],_aProve[_nCont,2],oFont1,390,005,,ALIGN_H_LEFT)
+				oPrinter:SayAlign(nLi3,aPos[6],TRANSFORM(_aProve[_nCont,3],'999.99'),oFont1,130,005,,ALIGN_H_RIGHT)
+				oPrinter:SayAlign(nLi3,aPos[6],TRANSFORM(_aProve[_nCont,4] , cPict3 ),oFont1,192,005,,ALIGN_H_RIGHT)
+				_nCont3 ++
+			ENDIF
+		endif
+
+	Next _nCont
+
+	nLi := 634
+	oPrinter:Box(  nLi+5, aPos[1], nLi+65, aPos[3], "-4" )
+	cMsgAniv := " 	                                     "
+	IF MONTH(dDataRef) = MONTH(SRA->RA_NASC)
+		cMsgAniv := Space(2)+"F E L I Z   A N I V E R S A R I O  ! !"
+	ENDIF
+
+	oPrinter:SayAlign(nLi+53,005,Space(2)+cMsgAniv,oFont1,196,005, , 0, 1 )
+
+	oPrinter:Box(  nLi+5, aPos[3], nLi+25, aPos[5], "-4" )
+	oPrinter:Box(  nLi+5, aPos[5], nLi+25, aPos[7], "-4" )
+	nLi += 20
+
+	oPrinter:SayAlign(nLi-10,aPos[4],Space(2)+UPPER("TOTAL BRUTO"),oFont2N,196,005, , 0, 1 )
+	oPrinter:SayAlign(nLi-10,aPos[6],Space(2)+UPPER("TOTAL DESCONTOS "),oFont2N,196,005, , 0, 1 )
+	oPrinter:SayAlign(nLi-10,aPos[4],TRANSFORM( TOTVENC , cPict3 )+ Space(2),oFont2,196,005, , 1, 1 )
+	oPrinter:SayAlign(nLi-10,aPos[6],TRANSFORM(TOTDESC , cPict3)+ Space(2),oFont2,196,005, , 1, 1 )
+
+	oPrinter:Box(  nLi+5, aPos[3], nLi+25, aPos[5], "-4" )
+	oPrinter:Box(  nLi+5, aPos[5], nLi+25, aPos[7], "-4" )
+	nLi += 20
+
+	oPrinter:SayAlign(nLi-10,aPos[4],Space(2)+"CREDITO: " + AllTrim(SRA->RA_BCDEPSA)+" - "+substr(DescBco(SRA->RA_BCDEPSA,SRA->RA_FILIAL),1,25),oFont2,196,005, , 0, 1 )
+	oPrinter:SayAlign(nLi-10,aPos[6],Space(2)+UPPER("LIQUIDO A RECEBER")+":",oFont2N,196,005, , 0, 1 )
+	oPrinter:SayAlign(nLi-10,aPos[6],TRANSFORM((TOTVENC-TOTDESC) , cPict3 )+ Space(2),oFont2,196,005, , 1, 1 )
+
+	oPrinter:Box(  nLi+5, aPos[3], nLi+25, aPos[5], "-4" )
+	oPrinter:Box(  nLi+5, aPos[5], nLi+25, aPos[7], "-4" )
+	nLi += 20
+
+	oPrinter:SayAlign(nLi-10,aPos[4],Space(2)+UPPER("CONTA:")+ Space(2)+SRA->RA_CTDEPSA,oFont2,196,005, , 0, 1 )
+
+	oPrinter:Box(  nLi+5, aPos[1], nLi+50, aPos[7], "-4" )
+	nLi += 40
+	oPrinter:SayAlign(nLi-15,005,Space(2)+"Recebi o valor acima em ___/___/___ ",oFont2N,585,005, , ALIGN_H_LEFT, 1 )
+	oPrinter:Line(nLi-3,200,nLi-3,450,,"-4")
+
+Return Nil

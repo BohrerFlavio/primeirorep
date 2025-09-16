@@ -1,0 +1,419 @@
+#Include "PROTHEUS.Ch"
+#INCLUDE "TOPCONN.CH"
+
+User Function SfBRW()
+	Local cTabela     := "ZS4"
+
+	Private cCadastro := "Envios SafeTrace"
+	Private aCores    := {}
+	Private aRotina	  := {;
+	{ "Pesquisar" 			, "AxPesqui" 	 , 0, 1, 0, NIL},; //"Pesquisar"
+	{ "Visualizar"			, "AxVisual"	 , 0, 2, 0, NIL},; //"Visualizar"
+	{ "Incluir"				, "AxInclui"  , 0, 3, 0, NIL},; //"Incluir"
+	{ "Alterar"				, "AxAltera"  , 0, 4, 0, NIL},; //"Alterar".
+	{ "Excluir"				, "AxDeleta"  , 0, 5, 0, NIL},; //"Excluir"
+	{ "Transmitir"			, "U_SAFETRACE"  , 0, 8, 0, NIL}}
+
+
+
+	DbSelectArea(cTabela)
+	(cTabela)->(DbSetOrder(1))
+
+
+	//Montando o Browse.
+	mBrowse(6, 1, 22, 75, cTabela, , , , , , aCores )
+
+	//Encerrando a rotina
+	(cTabela)->(DbCloseArea())
+
+
+Return
+
+//Para usar a função com passagem de parametro
+User Function OPENSFTRACE(codigoSafe,pedido)
+	Local _aArea       := GetArea()
+	dbSelectArea("ZS4")
+	ZS4->(dbSetOrder(1))
+	ZS4->(dbSeek(FwFilial("ZS4")+codigoSafe+pedido))
+
+	U_SAFETRACE()
+	ZS4->(DbCloseArea())
+	RestArea(_aArea)
+Return
+
+
+
+User Function SAFETRACE(lMens)
+	
+	Local aArea       := GetArea()
+	Local aArTemp     := GetArea()
+	Local emailRetorno := alltrim(SUPERGETMV('SF_EMRET',.F.,''))
+	Local aFieldSM0 := { ;
+		"M0_CODIGO",;    //Posição [1]
+	"M0_CODFIL",;    //Posição [2]
+	"M0_NOMECOM",;   //Posição [3]
+	"M0_CGC",;       //Posição [4]
+	"M0_INSCM",;     //Posição [5]
+	"M0_CIDENT",;    //Posição [6]
+	"M0_ESTENT",;    //Posição [7]
+	"M0_ENDENT",;    //Posição [8]
+	"M0_BAIRENT",;   //Posição [9]
+	"M0_CEPENT",;    //Posição [10]
+	"M0_COMPENT",;   //Posição [11]
+	"M0_TEL";        //Posição [12]
+	}
+	Local aSM0Data2 := FWSM0Util():GetSM0Data(, ZS4->ZS4_FILIAL, aFieldSM0)
+
+	Local razaoSocial := alltrim(aSM0Data2[3][2])
+	Local documentoFrig := alltrim(aSM0Data2[4][2])
+	Local sifFrig := alltrim(SUPERGETMV('SF_SIF',.F.,''))
+	Local ufFrig := alltrim(aSM0Data2[7][2])
+	Local cidadeFrig := alltrim(aSM0Data2[6][2])
+	Local _cNfOrigem := ""
+	Local _chvVend := ""
+	Local _cNfDoc := ''
+	Local _cNfSerie := ''
+	Local _nrPedido := alltrim(ZS4->ZS4_PEDIDO)
+	Local _nrCodSaf := alltrim(ZS4->ZS4_CODSAF)
+	Local cDataDes := ""
+    Local cTpCli := ""
+	local cLat,cLon
+	
+	
+	Local dados := '{"numeroPedido":"'+_nrPedido+'"'
+
+	default lMens     := .f.
+
+	dados += ',"frigorifico":'
+	dados += '{"emailRetorno":"'+emailRetorno+'",'
+	dados += '"razao_social":"'+razaoSocial+'",'
+	dados += '"documento":"'+documentoFrig+'",'
+	dados += '"sif":"'+sifFrig+'",
+	dados += '"endereco":{"uf":"'+ufFrig+'",'
+	dados += '"municipio":"'+cidadeFrig+'"}'
+	dados += '},'
+
+	dados += '"processos":{'
+
+
+	//Laço de repetição na ZS5
+	dbSelectArea("ZS5")
+	ZS5->(dbSetOrder(1))
+	ZS5->(dbSeek(FwFilial("ZS5")+_nrCodSaf))
+	_cont := 0
+	dados += '"abates":'
+	dados+='['
+	Do While !ZS5->(Eof()) .and. FwFilial("ZS5")+ZS5->ZS5_CODSAF==FWfilial('ZS5')+_nrCodSaf
+		
+		if _cont > 0
+			dados+=","
+		endif
+
+		_cont := _cont+1
+
+
+		dbSelectArea("SA2")
+		SA2->(dbSetOrder(1))
+		SA2->(dbSeek(FwFilial("SA2")+ZS5->ZS5_FAZEND+ZS5->ZS5_LOJFAZ))
+
+		cLat   := iif(alltrim(SA2->A2_LAT) == '', '30.847758', u_bGtoD(SA2->A2_LAT))	
+		cLong  := iif(alltrim(SA2->A2_LON) == '', '53.6137636',u_bGtoD(SA2->A2_LON))
+	
+
+		dados += '{"fazenda":'
+		dados += '{"codigo":"'+ZS5->ZS5_FAZEND+'",'
+		dados += '"documento":"'+alltrim(SA2->A2_CGC)+'",'
+		dados += '"nome_fantasia":"'+alltrim(SA2->A2_NREDUZ)+'",'
+		dados += '"razao_social":"'+alltrim(SA2->A2_NOME)+'",'
+		dados += '"endereco":'
+		dados += '{"uf":"'+alltrim(SA2->A2_EST)+'",'
+		dados += '"municipio":"'+alltrim(SA2->A2_MUN)+'"},'
+		dados += '"latitude":"'+cLat+'",'
+		dados += '"longitude":"'+cLong+'",'
+		dados += '"nirf":"'+alltrim(SA2->A2_NIRF)+'",'
+		dados += '"inscricao_estadual":"'+alltrim(SA2->A2_INSCR)+'",'
+		dados += '"inscricao_car":["'+alltrim(SA2->A2_CAR)+'"]'
+		dados += '},'
+
+
+            
+		dados += '"notasFiscais":['
+		_cNfOrigem := alltrim(ZS5->ZS5_CHAVEN)
+		_cNfDoc := alltrim(ZS5->ZS5_DOC)
+		_cNfSerie := alltrim(ZS5->ZS5_SERIE)
+		dados += '{'
+		dados += '"numero":'+alltrim(str(val(alltrim(ZS5->ZS5_DOC))))+','
+		dados += '"serie":'+alltrim(str(val(alltrim(ZS5->ZS5_SERIE))))+','
+		dados += '"chave":"'+alltrim(ZS5->ZS5_CHAVEN)+'"'
+		dados += '}'
+		dados += '],'
+
+		SA2->(DBCLOSEAREA())
+
+		//GTA
+		dados += '"gta":['
+		dados += '{"numero":"'+ALLTRIM(ZS5->ZS5_GTA)+'","serie":"'+ALLTRIM(ZS5->ZS5_SERGTA)+'","quantidade":"'+ALLTRIM(str(ZS5->ZS5_GTAQUA))+'"}'
+		dados += '],'
+
+
+		dados += '"itens":['
+		dados += '{'
+		cData := DTOS(ZS5->ZS5_DTABAT)
+		cData := left(cData,4)+"-"+right(left(cData,6),2)+'-'+RIGHT( cData, 2 )
+		dados += '"dataAbate":"'+cData+'",'
+		dados += '"loteAbate":"'+cData+'",'
+		dados += '"sexo":"'+alltrim(ZS5->ZS5_SEXO)+'",'
+		dados += '"acabamento":"'+alltrim(ZS5->ZS5_CODGOR)+'",'
+		dados += '"peso": {'
+		dados += '"bandaA":0,'
+		dados += '"bandaB":0'
+		dados += '},'
+		cDataDes := DTOS(ZS5->ZS5_DTDESO)
+		cDataDes := left(cDataDes,4)+"-"+right(left(cDataDes,6),2)+'-'+RIGHT( cDataDes, 2 )
+		dados += '"dataDesossa":"'+cDataDes+'",'
+		dados += '"loteDesossa":"'+cDataDes+'",'
+		dados += '"sifDesossa":"'+sifFrig+'"'
+		dados += '}'
+		dados += ']'
+		dados += '}' //Fim fazenda
+
+
+
+
+		DbSelectArea("ZS5")
+		ZS5->(DbSkip())
+	Enddo
+	dados += '],' //fim abates
+
+	ZS5->(DBCLOSEAREA())
+
+	dados += '"desossa":{'
+	dados += '"frigorifico":'
+	dados += '{"emailRetorno":"'+emailRetorno+'",'
+	dados += '"razao_social":"'+razaoSocial+'",'
+	dados += '"documento":"'+documentoFrig+'",'
+	dados += '"sif":"'+sifFrig+'",'
+	dados += '"endereco":{"uf":"'+ufFrig+'","municipio":"'+cidadeFrig+'"}'
+	dados += '},'//Fim frigorifico
+
+
+	dados += '"numeroPedido":"'+_nrPedido+'",'
+	dados += '"dataDesossa":"'+cDataDes+'",'
+
+
+	dados += '"lotesDesossa":[
+	dados += '{'
+	dados += '"inter":"'+cDataDes+'",'
+	dados += '"loteMP":"'+cData+'",'
+	dados += '"documento":"'+documentoFrig+'",'
+	dados += '"notaFiscalOrigem":'
+	dados += '{'
+	dados += '"numero":'+alltrim(str(val(_cNfDoc)))+','
+	dados += '"serie":'+alltrim(str(val(_cNfSerie)))+','
+	dados += '"chave":"'+_cNfOrigem+'"'
+	dados += '}'
+	dados += '}'
+	dados += '],' //Fim lote desossa
+
+	//Passagem dos produtos da expedição associado a esta contranota
+	dados += '"produtos":['
+
+	dbSelectArea("ZS6")
+	ZS6->(dbSetOrder(1))
+	ZS6->(dbSeek(FwFilial("ZS6")+_nrCodSaf))
+
+	_cont := 0
+
+	Do While !ZS6->(Eof()) .and. FwFilial("ZS6")+ZS6->ZS6_CODSAF==FWfilial('ZS6')+_nrCodSaf
+		IF _cont > 0
+			dados += ','
+		ENDIF
+
+		_cont := _cont+1
+
+		dados += '{'
+		dados += '"codigo_ean":"'+alltrim(ZS6->ZS6_CODBAR)+'",'
+		dados += '"nome":"'+alltrim(ZS6->ZS6_DESCPR)+'",'
+		cdtProd := DTOS(ZS6->ZS6_DTPROD)
+		//cdtProd := "20230101"
+		cdtProd := left(cdtProd,4)+"-"+right(left(cdtProd,6),2)+'-'+RIGHT( cdtProd, 2 )
+		dados += '"dataProducao":"'+alltrim(cdtProd)+'",'
+
+		cdtVali := DTOS(ZS6->ZS6_DTVALI)
+		//cdtVali := "20230101"
+		cdtVali := left(cdtVali,4)+"-"+right(left(cdtVali,6),2)+'-'+RIGHT( cdtVali, 2 )
+
+		dados += '"dataValidade":"'+alltrim(cdtVali)+'",'
+		dados += '"pesoLiquido":'+alltrim(ZS6->ZS6_PESLIQ)+','
+		dados += '"idCaixa":"'+alltrim(ZS6->ZS6_IDCAIX)+'",'
+		dados += '"idPalete":"'+alltrim(ZS6->ZS6_IDPALE)+'",'
+		dados += '"notaFiscal":{'
+		dados += '"numero":'+alltrim(str(val(alltrim(ZS6->ZS6_DOC))))+','
+		dados += '"serie":'+alltrim(str(val(alltrim(ZS6->ZS6_SERIE))))+','
+		dados += '"chave":"'+alltrim(ZS6->ZS6_CHVEXP)+'"'
+		dados += '},'
+		dados += '"documentoDestino":"'+alltrim(ZS6->ZS6_CNPJDE)+'"'
+		dados += '}'
+		_chvVend := ZS6->ZS6_CHVEXP
+		DbSelectArea("ZS6")
+		ZS6->(DbSkip())
+		
+	Enddo
+	ZS6->(DBCLOSEAREA())
+
+
+	dados += ']' //fim produtos
+
+	dados += '}
+	dados += '}'
+	dados += '}'
+
+    //Buscar o tipo de conectar para a nota
+    cQueV := " SELECT A1_GERSAFT FROM  "+ RETSQLNAME("SF2") +" SF2 "
+    cQueV += " INNER JOIN "+ RETSQLNAME("SA1") +" SA1 ON SA1.D_E_L_E_T_ <> '*' AND SA1.A1_COD = SF2.F2_CLIENTE AND SA1.A1_LOJA = SF2.F2_LOJA "
+    cQueV += " WHERE F2_CHVNFE = '"+_chvVend+"' AND SF2.D_E_L_E_T_ <> '*'"
+
+	cQueV:= ChangeQuery(cQueV)
+	TCQUERY cQueV NEW ALIAS "TRBV"
+
+	DBSelectArea("TRBV")
+	TRBV->(DbGoTop())
+	while !eof()
+		cTpCli := TRBV->A1_GERSAFT
+		TRBV->(DbSkip())
+	enddo
+			
+	TRBV->(dbCloseArea())	
+
+    
+	if lMens
+		u_zMsgLfg(dados, "JSON", 1, .T.)
+	endif
+
+
+return u_STInsert(dados,cTpCli)
+
+
+
+//qa.agrotransparencia.com.br:9000/
+user function STInsert(aDados,cTpCli)
+	Local bObject := {|| JsonObject():New()}
+	Local oJson   := Eval(bObject)
+	Local aHeader := {}
+	Local token := getToken(cTpCli)
+	Local urlPath := GETMV('SF_STURS')
+	Local retorno := {"placeholder": 0}
+    Default cTpCli := "1"
+
+
+    
+
+    retorno["status"] = ""
+    If cTpCli = "3"
+		MSGALERT("Será enviado para o GPA")
+        urlPath :=  GETMV('SF_STURP')
+	else
+		MSGALERT("Será enviado para o CARREFOUR")
+    EndIf
+
+	//MSGALERT(urlPath)
+
+	if !empty(token) .and. !empty(cTpCli)
+
+
+
+		Aadd(aHeader, 'Authorization: Bearer '+token)
+		aAdd(aHeader,"Content-Type: application/json; charset=utf-8")
+		
+
+
+		oRestClient := FWRest():New(urlPath)
+		
+		oRestClient:setPath("/send-request/traceability/send-order")
+
+
+
+
+		cBody := aDados
+
+		//msgalert(cBody)
+		oRestClient:SetPostParams(cBody)
+
+		If (oRestClient:Post(aHeader))
+			oDados := JsonObject():New()
+			oDados:fromJson(DecodeUTF8(oRestClient:GetResult()))
+			retorno["status"] = oDados["status"]
+			retorno["descricao"] = oDados["statusDescricao"]
+			retorno["mensagens"] = oDados["messages"]
+			retorno["mensagem"] = oDados["message"]
+		Else
+			MsgAlert("A relação desta nota fiscal de expedição já foi enviada com outra contranota de produtor rural")
+			/*MsgAlert('Houve erro na atualização no servidor!' + CRLF + ;
+				'Contate o Administrador!' + CRLF + ;
+				"Erro: " + oRestClient:GetLastError() + CRLF + CRLF + ;
+				"Result: " + oRestClient:GetResult(),'Atenção') */
+			retorno["status"] = "99"
+			retorno["mensagem"] = oRestClient:GetLastError()
+		EndIf
+	else
+
+		retorno["status"] = "99"
+
+	endif
+
+	
+
+Return retorno
+
+
+static function fGraxml()
+
+return
+
+
+static function fGravSF2()
+
+return
+
+
+static function getToken(cTpCli)
+
+	Local urlAuth := getmv('SF_STURS')
+	Local _Header := {}
+	Local cLogin := GETMV('SF_STLOG')
+	Local cSenha := GETMV('SF_STSEN')
+	Local cToken := ""
+
+	Local bObject := {|| JsonObject():New()}
+	Local oJson   := Eval(bObject)
+	oJson["username"] := cLogin
+	oJson["password"] := cSenha
+
+	If cTpCli = "3"
+        urlPath := GETMV('SF_STURP')
+    EndIf
+
+	aAdd(_Header,"Content-Type: application/json; charset=utf-8")
+
+	if EMPTY(cLogin) .or. EMPTY(cSenha)
+		MSGALERT( "SF_STLOG ou SF_STSEN não preenchido")
+	else
+
+		oRest := FWRest():New(urlAuth)
+		oRest:setPath("/login")
+
+		cBody := oJson:ToJson()
+		oRest:SetPostParams(cBody)
+
+		If (oRest:Post(_Header))
+			cToken := oRest:GetResult()
+		Else
+			// MENSAGEM DE ERRO
+			MsgAlert('Erro na geração de TOKEN!' + CRLF + ;
+				"Erro: " + oRest:GetLastError() + CRLF + CRLF + ;
+				"Result: " + oRest:GetResult(),'Atenção')
+		EndIf
+
+	endif
+
+return cToken

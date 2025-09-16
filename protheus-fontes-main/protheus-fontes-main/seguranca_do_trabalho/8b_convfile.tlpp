@@ -1,0 +1,166 @@
+#INCLUDE "fileio.ch"
+#INCLUDE "protheus.ch"
+#INCLUDE "XMLXFUN.CH"
+
+User Function lmconv()
+    Local camin := SuperGetMV("LM_CONVS", .F., "\importamdtpre\")
+    Local caminSoc := SuperGetMV("LM_SOC", .F., "\importamdt\")
+	Local aFiles    := {}
+	//Local aArqui    := {}
+	Local _nX
+	local nCount
+	//local nomesArq := ""
+	//local hashAtual := ""
+	local conteudo := ""
+	 Local nHandle  := 0
+     Local aPartNom := {}
+     Local cEvento := ""
+	//MSGALERT(camin).
+	aFiles := Directory(camin+"\*.xml")
+	nCount := Len(aFiles)
+	For _nX := 1 to nCount
+         nomeArquivo := alltrim(aFiles[_nX,1])
+
+		aPartNom := StrToKarr( alltrim(nomeArquivo) , '_')	
+        cEvento := "S"+aPartNom[2]
+         
+        //u_showarray(aPartNom)
+        while cEvento!="S2240" .and. cEvento!="S2220"
+            cEvento := FWInputBox("Qual o evento, S2220 ou S2240 do arquivo "+alltrim(nomeArquivo)+"?", cEvento)
+        end
+    
+        conteudo := u_xmlESocial(camin+"\"+alltrim(aFiles[_nX,1]),cEvento)	
+        nomeArquivo := "S-"+aPartNom[2]+"_"+aPartNom[3]
+     
+        if(alltrim(left(conteudo[1],4))!="")
+        
+            nomeArquivo := left(conteudo[1],4)+"_"+nomeArquivo
+            //msgalert(conteudo["matricula"])
+
+            nHandle := MsFCreate(caminSoc+"\"+nomeArquivo)
+            xml := EncodeUTF8(conteudo[2], "iso8859-1")
+                
+            WrtStrTxt( nHandle, xml)
+            FClose( nHandle )
+
+            __CopyFile(camin+"\"+alltrim(aFiles[_nX,1]),camin+"\processado\"+alltrim(aFiles[_nX,1]))
+            
+            FERASE(camin+"\"+alltrim(aFiles[_nX,1]))
+        else
+            //__CopyFile(camin+"\"+alltrim(aFiles[_nX,1]),camin+"\erro\"+alltrim(aFiles[_nX,1]))
+        endif
+
+	Next _nX
+
+    If MsgYesNo("Deseja realizar a importação dos arquivos?")
+        TAFA500()
+        //TAFAINTEG()
+      //  TAFMONTES()
+    endif
+Return .F.
+
+User Function xmlESocial(caminho,evento)
+   
+  local cError := ""
+  local cWarning := ""
+  local oXml := nil
+ // local cName := "_MATRICULA"
+  
+  Local retorno := {}
+ 
+  cXml := MemoRead(caminho)
+  oXml := XmlParser( cXml, "_", @cError, @cWarning )
+  // Remove o elemento <NomeCliente> do xml
+  //lxml := XmlDelNode(oXml:_ESOCIAL:_EVTEXPRISCO:_IDEVINCULO, cName)
+  //oXML := XmlGetChild(oXML:_ESOCIAL, 2)
+  if(evento="S2240")
+    cCpf := StrZero(val(oXml:_ESOCIAL:_EVTEXPRISCO:_IDEVINCULO:_CPFTRAB:Text), 11)
+    //XmlDelNode(oXml:_ESOCIAL:_EVTEXPRISCO:_IDEVINCULO, "_MATRICULA")
+    //XmlNewNode(oXml:_ESOCIAL:_EVTEXPRISCO:_IDEVINCULO, "matricula", "matricula", "NOD" )
+    
+  elseif(evento="S2220")
+    cCpf := StrZero(val(oXml:_ESOCIAL:_EVTMONIT:_IDEVINCULO:_CPFTRAB:Text),11)
+    //XmlDelNode(oXml:_ESOCIAL:_EVTMONIT:_IDEVINCULO, "_MATRICULA")
+    //XmlNewNode(oXml:_ESOCIAL:_EVTMONIT:_IDEVINCULO, "matricula", "matricula", "NOD" )
+    
+  endif
+    cAliasFunc := GetNextAlias()
+    
+    BeginSQL Alias cAliasFunc
+        SELECT TOP 1 
+        C9V_MATRIC 
+        FROM %table:C9V% C9V
+        WHERE 
+        C9V_CPF = %exp:cCpf%
+        AND C9V.%notDel%
+        
+        ORDER BY C9V_DINSIS DESC
+    EndSQL
+    dbSelectArea( cAliasFunc )
+    cMatric := ( cAliasFunc )->( C9V_MATRIC )
+    ( cAliasFunc )->(dbclosearea ())
+    //retorno["matricula"] = cMatric
+    aAdd(retorno,cMatric)
+    if(evento="S2240")
+        oXml:_ESOCIAL:_EVTEXPRISCO:_IDEVINCULO:_MATRICULA:Text := alltrim(cMatric)
+        oXml:_ESOCIAL:_EVTEXPRISCO:_IDEVINCULO:_CPFTRAB:Text := alltrim(cCpf)
+    elseif(evento="S2220")
+        oXml:_ESOCIAL:_EVTMONIT:_IDEVINCULO:_MATRICULA:Text := alltrim(cMatric)
+        oXml:_ESOCIAL:_EVTMONIT:_IDEVINCULO:_CPFTRAB:Text := alltrim(cCpf)
+    endif
+    
+    // Tranforma o Objeto XML em string
+    SAVE oXml XMLSTRING cXml
+    //retorno["xml"] = cXml
+    //cXml:=StrTran( cXml, "MATRICULA", "matricula" )
+    cXml := '<?xml version="1.0" encoding="UTF-8"?>'+''+cXml
+    aAdd(retorno,cXml)
+  
+  return retorno
+  
+  
+  
+  
+
+//Trocar no menu da medicina que MDTA155A
+User Function OB_MDT155A
+    PUTMV('MV_NG2ESOC','1')
+    MDTA155()
+    PUTMV('MV_NG2ESOC','2')
+Return
+
+
+//Trocar no menu da medicina que MDTA685
+User Function OB_MDT685
+    PUTMV('MV_NG2ESOC','1')
+    MDTA685()
+    PUTMV('MV_NG2ESOC','2')
+Return
+
+
+//Trocar no menu da medicina que MDTA640
+User Function OB_MDT640
+    PUTMV('MV_NG2ESOC','1')
+    MDTA640()
+    
+    PUTMV('MV_NG2ESOC','2')
+Return
+
+
+//Substituir no menu MDTA695
+User function OB_MDT695
+
+    IF getmv('MV_NG2ESOC')=='2'
+        MDTA695()
+    else
+        Aviso("Atenção!","Neste momento esta com a integração ao TAF habilitado (MV_NG2ESOC), pois estao fazendo uma CAT, favor aguarde alguns minutos e tente novamente")
+        If MsgYesNo("Mesmo assim deseja entrar nesta rotina?", "Atenção!")
+            PUTMV('MV_NG2ESOC','2')
+            MDTA695()
+            
+        endif
+    endif
+    
+
+Return
+  
